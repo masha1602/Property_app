@@ -1,0 +1,133 @@
+---
+title: "ds_proj.code"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(foreign)
+#Задаем максимальную занятость для объектов.
+max_ocup_rate <- 0.7
+#Задаем долю бронирований, имеющих отзывы.
+rev_rate <- 0.5
+#Задаем среднюю длину бронирования.
+avg_stay <- 6.4
+```
+
+```{r import and cleaning}
+d <- read_csv("data32.csv") %>%
+#Здесь и далее приводим данные в удобочитаемый и пригодный к использованию формат.
+  mutate(price = parse_number(price)) %>%
+#Чистим данные от квартир, которые сдаются за крайне низкую цену, а также наименее востребованное жилье.
+  filter(price >= quantile(price, 0.05, na.rm = T) & reviews_per_month >= quantile(reviews_per_month, 0.05, na.rm = T)) %>%
+#Создаем дамми, показывающие наличие депозита и платы за уборку.
+  mutate(cleaning_fee = parse_number(cleaning_fee) > 0 & !is.na(cleaning_fee), security_deposit = parse_number(security_deposit) > 0 & !is.na(security_deposit)) %>%
+#Создаем дамми, показывающую, целиком сдается объект или нет.
+  mutate(is.home = room_type == "Entire home/apt") %>%
+#Создаем переменную-логарифмированную цену.
+  mutate(`log(price)` = log(price))
+  #С тремя другими важными параметрами - политикой отмены бронирования, типом и оснащением объекта - работаем в следующих чанках.
+```
+
+```{r canc policy}
+#Факторизуем переменную-тип политики отмены...
+d <- d %>%
+  mutate(cancellation_policy = ifelse(str_detect(d$cancellation_policy, "strict"), "strict", "moderate/flexible")) %>%
+  mutate(cancellation_policy = factor(cancellation_policy)) %>%
+#...и устанавливаем уровень "по умолчанию": "strict"  
+  mutate(cancellation_policy = relevel(cancellation_policy, ref = "strict"))
+```
+
+```{r select amenities}
+#Разделяем строки, где перечислены свойства жилья.
+d1 <- d %>%
+  mutate(amenities = str_replace_all(amenities, '["{}]', '')) %>%
+  mutate(amenities = strsplit(as.character(amenities), ",")) %>%
+  unnest(amenities) %>%
+#Считаем, какие являются наиболее популярными.
+  mutate(amenities = factor(amenities))
+summary(d1$amenities)
+#Отбираем те свойства, которые, на наш взгляд, имеют влияние на цену.
+d <- d %>%
+  mutate(has_disab.acc = str_detect(d$amenities, "Wheelchair accessible"), has_heat = str_detect(d$amenities, "Heating"), has_ac = str_detect(d$amenities, "Air conditioning"), has_tv = str_detect(d$amenities, "TV"), has_fridge = str_detect(d$amenities, "Refrigerator"), has_24ch.in = str_detect(d$amenities, "24-hour check-in"), has_grdn = str_detect(d$amenities, "Garden or backyard"), has_wifi = str_detect(d$amenities, "Wifi"), has_bbq = str_detect(d$amenities, "BBQ grill"))
+```
+
+```{r prop type}
+#Определяем количество объектов, принадлежащих к тому или иному типу недвижимости.
+d1 <- d %>%
+  group_by(property_type) %>%
+  summarise(type_n = n()) %>%
+  arrange(desc(type_n))
+type_other <- (d1 %>%
+#Объединяем достаточно редкие в "Other".
+  filter(type_n <= d1[d1$property_type == "Other",]$type_n))$property_type
+d <- d %>% 
+  mutate(property_type = ifelse(property_type %in% type_other,"Other", property_type)) %>% 
+#Факторизуем и настраиваем уровень "по умолчанию": "Other".
+  mutate(property_type = factor(property_type)) %>%
+  mutate(property_type = relevel(property_type, ref = "Other")) %>%
+#Завершая обработку данных, убираем записи с пропущенными значениями...
+  drop_na()# %>%
+#...и оставляем только нужные столбцы
+ # select(`log(price)`, is.home, accommodates, property_type, reviews_per_month, bathrooms, availability_90, number_of_reviews, cancellation_policy, host_listings_count,  minimum_nights, review_scores_location, has_disab.acc, has_ac, has_tv, has_fridge, has_grdn, has_24ch.in, has_wifi, has_bbq, price, id, longitude, latitude)
+```
+
+```{r model p}
+#Смотрим на переменные.
+summary(d)
+#Считаем корелляцию переменных.
+cor(d[, unlist(lapply(d, is.numeric))])
+#Выполняем простую регрессию.
+olsreg1 <- lm(d$`log(price)` ~ d$accommodates)
+summary(olsreg1)
+confint(olsreg1, level = 0.95)
+anova(olsreg1)
+#Выполняем полную регрессию.
+olsreg2 <- lm(d$`log(price)` ~ d$is.home + d$accommodates + d$property_type + d$bathrooms + d$availability_90 + d$number_of_reviews + d$cancellation_policy + d$host_listings_count +  d$minimum_nights + d$review_scores_location + d$has_disab.acc + d$has_ac + d$has_tv + d$has_fridge + d$has_grdn + d$has_24ch.in)
+summary(olsreg2)
+confint(olsreg2, level = 0.95)
+anova(olsreg2)
+#Прогнозируем переменные и смотрим ее статистики.
+Yhat <- fitted(olsreg2)
+summary(Yhat)
+#Считаем остатки и смотрим их статистики.
+ehat <- resid(olsreg2)
+summary(ehat)
+#Добавляем в data.frame предсказанные значения.
+d <- cbind(d, Yhat, exp(Yhat))
+```
+
+```{r visual, eval=FALSE, include=FALSE}
+#Простая визуализация
+index <- sample(1:nrow(d), nrow(d) / 100)
+s <- d[index, ]
+g <- ggplot(data = s) +
+  geom_jitter(aes(x = accommodates, y = `log(price)`), height = 1, width = 1) +
+  geom_line(aes(x = accommodates, y = Yhat))
+g
+```
+
+```{r estimated income}
+#Прогнозируем прибыль.
+d <- d %>%
+  mutate(p.book_rate = reviews_per_month / rev_rate) %>%
+  mutate(p.stay = pmax(minimum_nights, avg_stay)) %>%
+  mutate(p.ocup_rate = pmin(30 * max_ocup_rate, p.stay * p.book_rate)) %>%
+  mutate(p.inc = `exp(Yhat)` * p.ocup_rate) #%>%
+#Убираем ненужные столбцы.
+ # select(p.inc, `exp(Yhat)`, `log(price)`, p.ocup_rate, is.home, accommodates, property_type, number_of_reviews, bathrooms, cancellation_policy, host_listings_count,  minimum_nights, review_scores_location, price, id, latitude, longitude, has_wifi, has_ac, has_tv, has_fridge, has_bbq, has_grdn, has_24ch, has_disab.acc)
+```
+
+```{r max/min, eval=FALSE, include=FALSE}
+#Взглянем на несколько крайних (не)прибыльных объектов.
+d1 <- d %>%
+  arrange(desc(p.inc))
+rbind(head(d1), tail(d1))
+```
+
+```{r export}
+names(d)[names(d) == 'exp(Yhat)'] <- 'eYhat'
+names(d)[names(d) == 'log(price)'] <- 'lprice'
+write.dta(d, "nycdata.dta")
+beta <- coefficients(olsreg2)
+```

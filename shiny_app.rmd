@@ -1,0 +1,89 @@
+```{r}
+ui <- fluidPage(
+  tags$head(tags$style(
+    HTML('#sidebar {
+        }
+        body, label, input, button, select { 
+          font-family: "Georgia";
+        }')
+  )),
+  setBackgroundColor(
+  color = c("#F7FBFF", "#b3b3cc"),
+  gradient = c("linear", "radial"),
+  direction = c("bottom", "top", "right", "left"),
+  shinydashboard = FALSE),
+  titlePanel(h3(strong("Calculate your property's price"))),
+    sidebarLayout(
+      sidebarPanel(
+        selectInput("is.home", label = "Your property is", choices = list("House/apartment" = 1, "Room" = 0)),
+        selectInput("type", label = "Your property is", 
+                    choices = list("House" = 6 , "Apartment" = 1, "Townhouse" = 9, "Guest suite" = 4, "Loft" = 7, "Condominium" = 3, "Boutique hotel" = 2, "Hotel" = 5, "Serviced Apartement" = 8)),
+        selectInput("cancel", label = "Your cancellation policy",  choices = list("strict" = 0, "moderate/flexible" = 1)),
+        numericInput("listingcount", label = "How many listings you have?", value = 1),
+        numericInput("accommodates", label = "How many people you property accommodates?", value = 1),
+        numericInput("bathrooms", label = "How many bathrooms?", value = 0),
+        numericInput("score", label =  "What score you location has?", value = 0),
+        selectInput("ac", label = "Your property has A/C", 
+                    choices = list("yes"=1, "no")),
+        selectInput("tv", label = "Your property has TV", 
+                    choices = list("yes"=1, "no"=0)),
+        selectInput("fridge", label = "Your property has fridge", 
+                    choices = list("yes"=1, "no"=0)),
+        selectInput("grdn", label = "Your property has garden", 
+                    choices = list("yes"=1, "no"=0)),
+        selectInput("check", label = "24h check-in is available", 
+                    choices = list("yes"=1, "no"=0)),
+        selectInput("disab", label = "Your property is disabled-accessible", 
+                    choices = list("yes"=1, "no"=0)),
+        numericInput("nights", label = "Min. nights count", value=1),
+      submitButton("Calculate")),
+  mainPanel(
+     h4("Predicted price per night in $"),
+        textOutput("table"),
+     h4("Options for the same price in the area"),
+     tabPanel("Map", leafletOutput("map")),
+     tableOutput("table1")
+     
+     )))
+```
+
+```{r}
+server = function(input, output, session) {
+  library(shiny)
+library(shinyWidgets)
+library(leaflet)
+  d = read.csv("data_ready")
+  beta = c(2.9609197540, 0.5458775049, 0.0933975402, -0.1236885020, 1.1823344710, 0.0257869044, -0.3186462062, 0.5358949988, -0.3127986937, 0.0768998430, 0.2661568477, -0.1747903488, 0.1861113415, 0.0008548912, -0.0005756284, -0.0513530420, 0.0001238454, -0.0008518565, 0.1039453650, 0.1275683526, 0.1068390104, 0.0764958167, -0.0504449813, -0.0264269154, 0.0751318082)
+   output$table <- renderText({
+  input1 = data.frame(is.home = input$is.home, cancel = input$cancel, type = input$type, listcount = input$listingcount, accom = input$accommodates, bath = input$bathrooms, score = input$score, ac = input$ac, tv = input$tv, fridge = input$fridge, grdn = input$grdn, ch24 = input$check, disacc = input$disab, min.n = input$nights)
+    X <- c(1, input1$is.home==1, input1$accom, input1$type == 1, input1$type == 2, input$type == 3, input$type == 4, input$type == 5, input$type == 6, input1$type == 7, input1$type == 8, input1$type == 9, input1$bath==1, mean(d$availability_90), mean(d$number_of_reviews), input1$cancel==1, input1$listcount, input1$min.n, mean(d$review_scores_location), input1$ac==1, input1$tv==1, input1$fridge==1, input1$grdn==1, input1$ch24==1, input1$disacc==1)
+predicted_price <- exp(sum(X * beta))
+print(predicted_price, align = "center")
+   })
+   
+   output$map <- renderLeaflet({
+     input1 = data.frame(is.home = input$is.home, cancel = input$cancel, type = input$type, listcount = input$listingcount, accom = input$accommodates, bath = input$bathrooms, score = input$score, ac = input$ac, tv = input$tv, fridge = input$fridge, grdn = input$grdn, ch24 = input$check, disacc = input$disab, min.n = input$nights)
+    X <- c(1, input1$is.home==1, input1$accom, input1$type == 1, input1$type == 2, input$type == 3, input$type == 4, input$type == 5, input$type == 6, input1$type == 7, input1$type == 8, input1$type == 9, input1$bath==1, mean(d$availability_90), mean(d$number_of_reviews), input1$cancel==1, input1$listcount, input1$min.n, mean(d$review_scores_location), input1$ac==1, input1$tv==1, input1$fridge==1, input1$grdn==1, input1$ch24==1, input1$disacc==1)
+predicted_price <- exp(sum(X * beta))
+     data = filter(d,exp(d$eYhat)< predicted_price+20 | exp(d$eYhat)>predicted_price-20 ) %>% sample_n(5) %>% select( longitude, latitude)
+   leaflet(data) %>% addTiles() %>%
+      addMarkers(data$longitude, data$latitude)
+  })
+   
+   output$table1 <- renderTable({
+     input1 = data.frame(is.home = input$is.home, cancel = input$cancel, type = input$type, listcount = input$listingcount, accom = input$accommodates, bath = input$bathrooms, score = input$score, ac = input$ac, tv = input$tv, fridge = input$fridge, grdn = input$grdn, ch24 = input$check, disacc = input$disab, min.n = input$nights)
+    X <- c(1, input1$is.home==1, input1$accom, input1$type == 1, input1$type == 2, input$type == 3, input$type == 4, input$type == 5, input$type == 6, input1$type == 7, input1$type == 8, input1$type == 9, input1$bath==1, mean(d$availability_90), mean(d$number_of_reviews), input1$cancel==1, input1$listcount, input1$min.n, mean(d$review_scores_location), input1$ac==1, input1$tv==1, input1$fridge==1, input1$grdn==1, input1$ch24==1, input1$disacc==1)
+predicted_price <- exp(sum(X * beta))
+     data = filter(d,exp(d$eYhat)<predicted_price+20 | exp(d$eYhat)>predicted_price-20 ) %>%
+       select(neighbourhood, property_type, cancellation_policy, amenities)%>% sample_n(5)
+   })
+   }
+
+
+```
+
+```{r}
+shinyApp(ui, server)
+
+```
+`

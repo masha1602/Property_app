@@ -1,0 +1,26 @@
+"","x"
+"(Intercept)",2.96091975401237
+"d$is.homeTRUE",0.545877504946071
+"d$accommodates",0.0933975402224203
+"d$property_typeApartment",-0.123688502002715
+"d$property_typeBoutique hotel",1.18233447103103
+"d$property_typeCondominium",0.0257869044033853
+"d$property_typeGuest suite",-0.31864620616544
+"d$property_typeHotel",0.535894998810281
+"d$property_typeHouse",-0.312798693718821
+"d$property_typeLoft",0.076899842955762
+"d$property_typeServiced apartment",0.266156847713081
+"d$property_typeTownhouse",-0.174790348818013
+"d$bathrooms",0.186111341539295
+"d$availability_90",0.000854891160313459
+"d$number_of_reviews",-0.000575628355796001
+"d$cancellation_policymoderate/flexible",-0.0513530419825254
+"d$host_listings_count",0.000123845406102834
+"d$minimum_nights",-0.000851856496256257
+"d$review_scores_location",0.103945365043062
+"d$has_disab.accTRUE",0.127568352630164
+"d$has_acTRUE",0.106839010370678
+"d$has_tvTRUE",0.0764958166889425
+"d$has_fridgeTRUE",-0.0504449812727297
+"d$has_grdnTRUE",-0.0264269153665556
+"d$has_24ch.inTRUE",0.0751318081859506
